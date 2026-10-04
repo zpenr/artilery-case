@@ -1,7 +1,19 @@
 -- Каждый пользователь имеет одинаковое количество измерений.
 
-SELECT Users.name, count(users.id) as batches_num FROM Users INNER JOIN Logs ON 
-Logs.user_id = users.id GROUP BY Users.name;
+WITH per_user AS (
+    SELECT Users.name AS user_name,
+           count(Parameters.id) AS measurements_num
+    FROM Users
+    LEFT JOIN Logs ON Logs.user_id = Users.id
+    LEFT JOIN Parameters ON Parameters.log_id = Logs.id
+    GROUP BY Users.id, Users.name
+)
+SELECT user_name,
+       measurements_num,
+       (SELECT min(measurements_num) FROM per_user) AS min_measurements
+FROM per_user
+WHERE measurements_num <> (SELECT min(measurements_num) FROM per_user)
+ORDER BY measurements_num, user_name;
 
 -- У нас нет пустых пачек измерения
 

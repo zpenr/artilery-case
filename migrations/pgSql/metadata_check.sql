@@ -6,11 +6,15 @@ SELECT * FROM (
 			ELSE table_type
 		END AS type
 	FROM information_schema.tables
-	WHERE table_schema = 'public'
+	WHERE table_catalog = 'study2025'
+		AND table_schema = 'public'
+
 
 	UNION ALL
 
 	SELECT sequence_name, 'Последовательность'
 	FROM information_schema.sequences
-	WHERE sequence_schema = 'public'
+	WHERE sequence_catalog = 'study2025'
+		AND sequence_schema = 'public'
+
 );

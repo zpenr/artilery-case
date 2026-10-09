@@ -32,16 +32,21 @@ DO $$
 		CREATE TABLE IF NOT EXISTS Parameters (id int DEFAULT nextval('parameters_id') PRIMARY KEY,
 			log_id int NOT NULL, param_id int NOT NULL, units_id int NOT NULL, param_value Decimal(7,2));
 
-		CREATE TABLE IF NOT EXISTS public.Tables(id int DEFAULT nextval('tables_id') PRIMARY KEY, name text UNIQUE);
+		-- Новая структура для гибкого хранения расчётных таблиц
+		CREATE TABLE IF NOT EXISTS Calc_tables(id int DEFAULT nextval('tables_id') NOT NULL UNIQUE, name text);
+		COMMENT ON TABLE Calc_tables IS 'Связывает строки и столбцы в единую таблицу';
 
-		CREATE TABLE IF NOT EXISTS public.Columns(id int DEFAULT nextval('cols_id') PRIMARY KEY,
+		CREATE TABLE IF NOT EXISTS Calc_columns(id int DEFAULT nextval('cols_id') NOT NULL UNIQUE, 
 			table_id int NOT NULL, param_id int,  unit_id int, min_val decimal(7,2), max_val decimal(7,2));
-
-		CREATE TABLE IF NOT EXISTS public.Rows(id int DEFAULT nextval('rows_id') PRIMARY KEY,
+		COMMENT ON TABLE Calc_tables IS 'Колонки(провемые значения) таблицы с подходящими диапозонами';
+		
+		CREATE TABLE IF NOT EXISTS Calc_rows(id int DEFAULT nextval('rows_id') NOT NULL UNIQUE,
 			table_id int NOT NULL, param_id int, unit_id int);
-
-		CREATE TABLE IF NOT EXISTS public.Cells(id int DEFAULT nextval('cells_id') PRIMARY KEY,
+		COMMENT ON TABLE Calc_tables IS 'Строки таблицы, показывает значение какого параметра записано';
+		
+		CREATE TABLE IF NOT EXISTS Calc_cells(id int DEFAULT nextval('cells_id'), 
 			col_id int NOT NULL, row_id int NOT NULL, val decimal(7,2));
+		COMMENT ON TABLE Calc_tables IS 'Пересечение колонок и строк, содержит значение параметра строки при условии данных столца';
 
 
 	COMMIT;
@@ -196,15 +201,14 @@ DO $$
             (24, 1, 1, 450),    (24, 2, 3, 25.0), (24, 3, 2, 780),
             (24, 4, 4, 24),     (24, 6, 1, 5);
             
-        INSERT INTO public.Tables(name) VALUES ('Расчет температуры');
-        INSERT INTO public.Columns(table_id, param_id, unit_id, min_val, max_val) VALUES
-            (1, 2,3, -100, 0), (1, 2 ,3, 0, 5), (1, 2 ,3, 10, 15), (1, 2 ,3, NULL, 20),
-            (1, 2 ,3, NULL, 25), (1, 2 ,3, NULL, 30), (1, 2 ,3, NULL, 40);
-        INSERT INTO public.Rows(table_id, param_id, unit_id) VALUES (1, 7, 2);
-
-        INSERT INTO public.Cells(col_id, row_id, val) VALUES (1,1,0),
-            (2,1,0.5), (3,1,1),(4,1,1.5),
-            (5,1,2),(6,1,3.5),(7,1,4.5);
+		INSERT INTO Calc_tables(name) VALUES ('Расчет температуры');
+		INSERT INTO Calc_columns(table_id, param_id, unit_id, min_val, max_val) VALUES 
+			(1, 2,3, -100, 0), (1, 2 ,3, 0, 5), (1, 2 ,3, 10, 15), (1, 2 ,3, NULL, 20), 
+			(1, 2 ,3, NULL, 25), (1, 2 ,3, NULL, 30), (1, 2 ,3, NULL, 40);
+		INSERT INTO Calc_rows(table_id, param_id, unit_id) VALUES (1, 7, 2);
+		INSERT INTO Calc_cells(col_id, row_id, val) VALUES (1,1,0), 
+			(2,1,0.5), (3,1,1),(4,1,1.5), 
+			(5,1,2),(6,1,3.5),(7,1,4.5);
 		
 	COMMIT;
 
@@ -233,49 +237,49 @@ DO $$
         ADD CONSTRAINT fk_parameters_units
         FOREIGN KEY (units_id) REFERENCES Units_measurement(id);
     
-        ALTER TABLE public.Columns
-        ADD CONSTRAINT fk_columns_tables
-        FOREIGN KEY (table_id) REFERENCES public.Tables(id);
-    
-        ALTER TABLE public.Columns
-        ADD CONSTRAINT fk_columns_tparams
-        FOREIGN KEY (param_id) REFERENCES public.Types_parameters(id);
-    
-        ALTER TABLE public.Columns
-        ADD CONSTRAINT fk_columns_units
-        FOREIGN KEY (unit_id) REFERENCES public.Units_measurement(id);
-    
-        ALTER TABLE public.Rows
-        ADD CONSTRAINT fk_rows_tables
-        FOREIGN KEY (table_id) REFERENCES public.Tables(id);
-    
-        ALTER TABLE public.Rows
-        ADD CONSTRAINT fk_rows_tparams
-        FOREIGN KEY (param_id) REFERENCES public.Types_parameters(id);
-    
-        ALTER TABLE public.Rows
-        ADD CONSTRAINT fk_rows_units
-        FOREIGN KEY (unit_id) REFERENCES public.Units_measurement(id);
-    
-        ALTER TABLE public.Cells
-        ADD CONSTRAINT fk_cells_columns
-        FOREIGN KEY (col_id) REFERENCES public.Columns(id);
-    
-        ALTER TABLE public.Cells
-        ADD CONSTRAINT fk_cells_rows
-        FOREIGN KEY (row_id) REFERENCES public.Rows(id);
-    
+		ALTER TABLE Calc_columns
+		ADD CONSTRAINT fk_Columns_tparams
+		FOREIGN KEY (param_id) REFERENCES public.Types_parameters(id);
+		
+		ALTER TABLE Calc_rows
+		ADD CONSTRAINT fk_rows_tparams
+		FOREIGN KEY (param_id) REFERENCES public.Types_parameters(id);
+		
+		ALTER TABLE Calc_columns
+		ADD CONSTRAINT fk_columns_tables 
+		FOREIGN KEY (table_id) REFERENCES Calc_tables(id);
+		
+		ALTER TABLE Calc_columns
+		ADD CONSTRAINT fk_columns_units
+		FOREIGN KEY (unit_id) REFERENCES public.Units_measurement(id);
+
+		ALTER TABLE Calc_rows
+		ADD CONSTRAINT fk_rows_units
+		FOREIGN KEY (unit_id) REFERENCES public.Units_measurement(id);
+		
+		ALTER TABLE Calc_rows
+		ADD CONSTRAINT fk_rows_tables 
+		FOREIGN KEY (table_id) REFERENCES Calc_tables(id);
+
+		ALTER TABLE Calc_cells
+		ADD CONSTRAINT fk_cells_columns 
+		FOREIGN KEY (col_id) REFERENCES Calc_columns(id);
+		
+		ALTER TABLE Calc_cells
+		ADD CONSTRAINT fk_cells_rows 
+		FOREIGN KEY (row_id) REFERENCES Calc_rows(id);
+
         ALTER TABLE Types_parameters
         ADD CONSTRAINT chk_types_parameters_range
         CHECK (min_val <= max_val);
     
-        ALTER TABLE public.Columns
+        ALTER TABLE Calc_columns
         ADD CONSTRAINT chk_columns_range
         CHECK (min_val IS NULL OR max_val IS NULL OR min_val <= max_val);
 		
 		ALTER TABLE Logs ALTER COLUMN date SET NOT NULL;
 		ALTER TABLE Parameters ALTER COLUMN param_value SET NOT NULL;
-		ALTER TABLE public.Cells ALTER COLUMN val SET NOT NULL;
+		ALTER TABLE Calc_cells ALTER COLUMN val SET NOT NULL;
 
 	COMMIT;
 

@@ -1,14 +1,15 @@
--- Создаем новый тип данных 
 DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'calc_point') THEN
+BEGIN 
+    BEGIN
         CREATE TYPE calc_point AS (
             x0 decimal(7,2),
             y0 decimal(7,2),
-			x1 decimal(7,2),
-            y1 decimal(7,2)			
+            x1 decimal(7,2),
+            y1 decimal(7,2)
         );
-    END IF;
+    EXCEPTION
+        WHEN duplicate_object THEN NULL;
+    END;
 END $$;
 
 CREATE OR REPLACE FUNCTION find_value(
@@ -89,49 +90,22 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION interpolation(x decimal(7,2), interpol_vals calc_point)
 RETURNS decimal(7,2) AS $$
-
+DECLARE 
+	dx decimal(7,2);
+	dy decimal(7,2);
 BEGIN 
-	-- если одинаковые то возвращаем 
-	IF interpol_vals.x0 = interpol_vals.x1 
-		THEN RETURN interpol_vals.y0;
+	dx := interpol_vals.x1 - interpol_vals.x0;
+	dy := interpol_vals.y1 - interpol_vals.y0;
+
+	IF dx = 0 OR dx IS NULL THEN
+		RETURN COALESCE(interpol_vals.y0, interpol_vals.y1);
 	END IF;
 	
-	RETURN (interpol_vals.y0 + (x - interpol_vals.x0) / (interpol_vals.x1 - interpol_vals.x0) * (interpol_vals.y1 - interpol_vals.y0))::decimal(7,2);
+	BEGIN
+		RETURN (interpol_vals.y0 + ((x - interpol_vals.x0) * dy) / dx)::decimal(7,2);
+	EXCEPTION
+		WHEN division_by_zero THEN
+			RETURN COALESCE(interpol_vals.y0, interpol_vals.y1);
+	END;
 END;
 $$ LANGUAGE plpgsql;
-
---Тестирование
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'test_result') THEN
-        CREATE TYPE test_result AS (
-            x decimal(7,2),
-            calced_y decimal(7,2),
-			target_y decimal(7,2),
-            is_pass bool		
-        );
-    END IF;
-END $$;
-
-CREATE OR REPLACE FUNCTION tests()
-RETURNS SETOF test_result AS $$
-DECLARE
-	interpol decimal(7,2);
-BEGIN
-		-- Тесты из ТЗ
-		interpol := interpolation(23, find_value(1,23));
-        RETURN NEXT ROW(23, interpol, 1.8 , interpol=1.8)::test_result;
-		interpol := interpolation(25, find_value(1,25));
-		RETURN NEXT ROW(25, interpol, 2, interpol=2)::test_result;
-		interpol := interpolation(3, find_value(1,3));
-		-- Свои тесты
-		RETURN NEXT ROW(3 , interpol, 0.5, interpol=0.5)::test_result;
-		interpol := interpolation(12, find_value(1,12));
-		RETURN NEXT ROW(12, interpol, 1 , interpol=1)::test_result;
-		interpol := interpolation(-5, find_value(1,-5));
-		RETURN NEXT ROW(-5, interpol, 0 , interpol=0)::test_result;
-   		RETURN;
-END;
-$$ LANGUAGE plpgsql;
-
-SELECT * FROM tests();

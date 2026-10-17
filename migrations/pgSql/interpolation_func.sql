@@ -87,22 +87,23 @@ BEGIN
 			
 	END;
 	$func$ LANGUAGE plpgsql;
-END $$;
 
-CREATE OR REPLACE FUNCTION interpolation(x decimal(7,2), interpol_vals calc_point)
-RETURNS decimal(7,2) AS $$
-DECLARE 
-	dx decimal(7,2);
-	dy decimal(7,2);
-BEGIN 
-	dx := interpol_vals.x1 - interpol_vals.x0;
-	dy := interpol_vals.y1 - interpol_vals.y0;
 
-	-- Проверка знаменателя, что он не равен 0 и не NULL
-	IF dx = 0 OR dx IS NULL THEN
-		RETURN COALESCE(interpol_vals.y0, interpol_vals.y1);
-	END IF;
+	CREATE OR REPLACE FUNCTION interpolation(x decimal(7,2), interpol_vals calc_point)
+	RETURNS decimal(7,2) AS $func$
+	DECLARE 
+		dx decimal(7,2);
+		dy decimal(7,2);
+	BEGIN 
+		dx := interpol_vals.x1 - interpol_vals.x0;
+		dy := interpol_vals.y1 - interpol_vals.y0;
 	
-	RETURN (interpol_vals.y0 + ((x - interpol_vals.x0) * dy) / dx)::decimal(7,2);
-END;
-$$ LANGUAGE plpgsql;
+		-- Проверка знаменателя, что он не равен 0 и не NULL
+		IF dx = 0 OR dx IS NULL THEN
+			RETURN COALESCE(interpol_vals.y0, interpol_vals.y1);
+		END IF;
+		
+		RETURN (interpol_vals.y0 + ((x - interpol_vals.x0) * dy) / dx)::decimal(7,2);
+	END;
+	$func$ LANGUAGE plpgsql;
+END $$;

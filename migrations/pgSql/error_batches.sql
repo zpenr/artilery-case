@@ -1,6 +1,7 @@
 -- Тестовые пачки с ошибками входных параметров.
 -- Скрипт рассчитан на запуск после create_db.sql, где уже есть пачки 1..24.
-BEGIN;
+DO $$
+BEGIN
 
 -- Новые пачки получают следующие номера: 25..32.
 INSERT INTO Logs (user_id, equipment_id, date) VALUES
@@ -64,7 +65,4 @@ INSERT INTO Parameters (log_id, param_id, units_id, param_value) VALUES
     (32, 4, 4, -1),
     (32, 6, 1, -5);
 
--- Синхронизируем счётчик пачек с фактическим максимальным id.
-SELECT setval('logs_id', (SELECT max(id) FROM Logs));
-
-COMMIT;
+END $$;

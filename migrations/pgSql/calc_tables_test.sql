@@ -1,5 +1,5 @@
 DO $$
-BEGIN;
+BEGIN
 	DROP TABLE IF EXISTS Calc_cells CASCADE;
 	DROP TABLE IF EXISTS Calc_columns CASCADE;
 	DROP TABLE IF EXISTS Calc_rows CASCADE;
@@ -10,46 +10,19 @@ BEGIN;
 	DROP SEQUENCE IF EXISTS cols_id CASCADE;
 	DROP SEQUENCE IF EXISTS tables_id CASCADE;
 	
-	CREATE TABLE Calc_tables (
-	    id              integer PRIMARY KEY,
-	    name            varchar(150) NOT NULL,
-	    equipment_id    integer REFERENCES Equipments(id),
-	    value_param_id  integer REFERENCES Types_parameters(id),
-	    value_unit_id   integer REFERENCES Units_measurement(id)
-	);
+	CREATE TABLE Calc_tables ( id integer PRIMARY KEY, name varchar(150) NOT NULL, equipment_id integer REFERENCES Equipments(id),
+	    value_param_id integer REFERENCES Types_parameters(id), value_unit_id integer REFERENCES Units_measurement(id));
 	
-	CREATE TABLE Calc_columns (
-	    id        integer PRIMARY KEY,
-	    table_id  integer NOT NULL REFERENCES Calc_tables(id) ON DELETE CASCADE,
-	    param_id  integer REFERENCES Types_parameters(id),
-	    unit_id   integer REFERENCES Units_measurement(id),
-	    min_val   numeric(7,2),
-	    max_val   numeric(7,2),
+	CREATE TABLE Calc_columns ( id integer PRIMARY KEY,table_id integer NOT NULL REFERENCES Calc_tables(id),
+		param_id integer REFERENCES Types_parameters(id),
+		unit_id integer REFERENCES Units_measurement(id), min_val numeric(7,2), max_val numeric(7,2));
 	
-	    CONSTRAINT ux_calc_columns_key
-	        UNIQUE (table_id, min_val, max_val)
-	);
+	CREATE TABLE Calc_rows (id integer PRIMARY KEY, table_id integer NOT NULL REFERENCES Calc_tables(id),
+	    param_id integer REFERENCES Types_parameters(id), unit_id integer REFERENCES Units_measurement(id),
+	    row_value numeric(7,2));
 	
-	CREATE TABLE Calc_rows (
-	    id         integer PRIMARY KEY,
-	    table_id   integer NOT NULL REFERENCES Calc_tables(id) ON DELETE CASCADE,
-	    param_id   integer REFERENCES Types_parameters(id),
-	    unit_id    integer REFERENCES Units_measurement(id),
-	    row_value  numeric(7,2),
-	
-	    CONSTRAINT ux_calc_rows_key
-	        UNIQUE (table_id, row_value)
-	);
-	
-	CREATE TABLE Calc_cells (
-	    id      integer PRIMARY KEY,
-	    col_id  integer NOT NULL REFERENCES Calc_columns(id) ON DELETE CASCADE,
-	    row_id  integer NOT NULL REFERENCES Calc_rows(id) ON DELETE CASCADE,
-	    val     text NOT NULL,
-	
-	    CONSTRAINT ux_calc_cells_key
-	        UNIQUE (col_id, row_id)
-	);
+	CREATE TABLE Calc_cells ( id integer PRIMARY KEY, col_id integer NOT NULL REFERENCES Calc_columns(id),
+	    row_id integer NOT NULL REFERENCES Calc_rows(id), val text NOT NULL);
 	
 	INSERT INTO Types_parameters (id, name, min_val, max_val)
 	VALUES
@@ -126,8 +99,7 @@ BEGIN;
 	    (12, 12, 1, '-29/30'),
 	    (13, 13, 1, '-39/-'),
 	    (14, 14, 1, '-49/-');
-	
-	-- 3.7. Ячейки Таблицы 3 ДМК для высоты 200 м.
+
 	INSERT INTO Calc_cells (id, col_id, row_id, val)
 	VALUES
 	    (15, 15, 2, '4'),
@@ -151,7 +123,7 @@ END $$;
 
 SELECT
     c.min_val AS delta_t,
-    cell.val  AS value_negative_positive
+    cell.val AS value_negative_positive
 FROM Calc_tables AS t
 JOIN Calc_columns AS c ON c.table_id = t.id
 JOIN Calc_rows AS r ON r.table_id = t.id
@@ -162,8 +134,8 @@ ORDER BY c.min_val;
 
 SELECT
     c.min_val AS v0,
-    cell.val  AS avg_wind_speed,
-    dir.val   AS delta_alpha
+    cell.val AS avg_wind_speed,
+    dir.val AS delta_alpha
 FROM Calc_tables AS t
 JOIN Calc_columns AS c ON c.table_id = t.id
 JOIN Calc_rows AS r ON r.table_id = t.id
@@ -172,16 +144,3 @@ LEFT JOIN Calc_cells AS dir ON dir.row_id = 3
 WHERE t.id = 2
   AND r.row_value = 200
 ORDER BY c.min_val;
-
-
-SELECT
-    sum(split_part(cell.val, '/', 1)::numeric) AS result
-FROM Calc_tables AS t
-JOIN Calc_columns AS c ON c.table_id = t.id
-JOIN Calc_rows AS r ON r.table_id = t.id
-JOIN Calc_cells AS cell ON cell.col_id = c.id AND cell.row_id = r.id
-WHERE t.id = 1
-  AND r.row_value = 200
-  AND c.min_val IN (10, 3);
-
-

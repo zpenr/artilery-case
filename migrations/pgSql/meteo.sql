@@ -17,7 +17,9 @@ DO $$
         ('TEMPERATURE', 15.9),
         ('PRESSURE_NEG', 500),
         ('TEMPERATURE_NEG', 50),
-        ('HEIGHT_NEG', 5000);
+        ('HEIGHT_NEG', 5000),
+        ('WIND_ZERO_DMK', 3),
+        ('RANGE_ZERO_VR', 40);
 
     -- Возвращает числовое значение константы по её коду
     CREATE OR REPLACE FUNCTION get_constant(p_code text)

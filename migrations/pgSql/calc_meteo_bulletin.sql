@@ -5,35 +5,47 @@ begin
         pressure numeric(8,2), wind_direction numeric(8,2),
         wind_speed numeric(8,2), bullet_range numeric(8,2));
 
-    create or replace function correction_value(p_type_id integer, p_height integer, p_column integer)
+    create or replace function correction_value(p input_params_type, p_type_id integer, p_height integer, p_column integer)
     returns integer
     language sql
     as $func$
         select c.row_values[u.i]
         from calc_correction c
         join calc_correction_types t on t.id = c.type_id
-        left join calc_correction_types p on p.id = t.parent_id
-        join calc_correction_headers h on h.id = coalesce(t.header_id, p.header_id)
+        left join calc_correction_types pt on pt.id = t.parent_id
+        join calc_correction_headers h on h.id = coalesce(t.header_id, pt.header_id)
         join lateral unnest(h.header_values) with ordinality as u(value, i) on u.value = p_column
         where c.type_id = p_type_id
         and c.height_id = p_height
         limit 1;
     $func$;
 
-    create or replace function wind_speed(p_type_id integer, p_height integer, p_value numeric)
+    create or replace function wind_speed(p input_params_type, p_type_id integer, p_height integer)
     returns integer
-    language sql
+    language plpgsql
     as $func$
-        select c.row_values[headers.i]
-        from calc_correction c
-        join calc_correction_heights hh on hh.id = c.height_id
-        join calc_correction_types t on t.id = c.type_id
-        join calc_correction_headers h on h.id = t.header_id
-        join lateral unnest(h.header_values) with ordinality as headers(value, i) on true
-        where c.type_id = p_type_id
-        and hh.height = p_height
-        order by abs(headers.value - p_value), headers.value
-        limit 1;
+    declare
+        v_val numeric;
+    begin
+        if p_type_id in (4, 5) then
+            v_val := coalesce(p.bullet_range, 0);
+        else
+            v_val := coalesce(p.wind_speed, 0);
+        end if;
+
+        return (
+            select c.row_values[headers.i]
+            from calc_correction c
+            join calc_correction_heights hh on hh.id = c.height_id
+            join calc_correction_types t on t.id = c.type_id
+            join calc_correction_headers h on h.id = t.header_id
+            join lateral unnest(h.header_values) with ordinality as headers(value, i) on true
+            where c.type_id = p_type_id
+            and hh.height = p_height
+            order by abs(headers.value - v_val), headers.value
+            limit 1
+        );
+    end;
     $func$;
 
 create procedure public.calc_meteo_bulletin(p public.input_params_type,equipment_id int)
@@ -48,20 +60,20 @@ declare
     v_wind_zero boolean;
 begin
 
-    v_delta := round(p.temperature + fn_calc_temperature_interpolation(p.temperature) - 15.9)::integer;
+    v_delta := round(p.temperature + fn_calc_temperature_interpolation(p.temperature) - get_constant('TEMPERATURE'))::integer;
 
     if equipment_id = 1 then
         v_temp_type := case when v_delta < 0 then 8 else 9 end;
         v_speed_type := 6;
         v_dir_type := 7;
         v_wind_value := coalesce(p.wind_speed, 0);
-        v_wind_zero := v_wind_value < 3;
+        v_wind_zero := v_wind_value < get_constant('WIND_ZERO_DMK');
     else
         v_temp_type := case when v_delta < 0 then 8 else 9 end;
         v_speed_type := 4;
         v_dir_type := 5;
         v_wind_value := coalesce(p.bullet_range, 0);
-        v_wind_zero := v_wind_value < 40;
+        v_wind_zero := v_wind_value < get_constant('RANGE_ZERO_VR');
     end if;
 
     create temp table if not exists calc_meteo_result(height integer,tt text,hh text,cc text);
@@ -86,13 +98,13 @@ begin
         end as hh,
         case
             when v_wind_zero then '00'
-            else lpad(wind_speed(v_speed_type, h.height, v_wind_value)::text,2,'0')
+            else lpad(wind_speed(p, v_speed_type, h.height)::text,2,'0')
         end as cc
     from calc_correction_heights h
     cross join lateral (
         select
-            coalesce(correction_value(v_temp_type, h.id, (abs(v_delta) / 10) * 10), 0)
-            + coalesce(correction_value(v_temp_type, h.id, abs(v_delta) % 10
+            coalesce(correction_value(p, v_temp_type, h.id, (abs(v_delta) / 10) * 10), 0)
+            + coalesce(correction_value(p, v_temp_type, h.id, abs(v_delta) % 10
             ), 0) as corr) x order by h.height;
 end;
 $proc$;

@@ -1,3 +1,5 @@
 **/.env
 **/pgadmin
 **/scripts
+**/__pycache__
+**/rest.bak

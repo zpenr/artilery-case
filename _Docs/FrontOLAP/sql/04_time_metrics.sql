@@ -1,26 +1,24 @@
 -- =============================================================================
--- 04_dim_time.sql
--- Отдельный скрипт формирования ресурса (метрики) "Время".
+-- 04_time_metrics.sql
+-- Отдельный скрипт формирования метрики «Время».
 --
--- Таблица public.dim_time содержит обязательные поля:
---   Код                     -> external_id (YYYYMM) + суррогатный id;
---   Дата начала месяца      -> month_start_date;
---   Дата окончания месяца   -> month_end_date;
---   Название месяца         -> month_name;
---   Год                     -> year;
---   Номер квартала          -> quarter_number;
---   Название квартала       -> quarter_name.
+-- Таблица public.time_metrics содержит:
+--   Код                   -> external_id (YYYYMM) + внутренний id;
+--   Дата начала месяца    -> month_start_date;
+--   Дата окончания месяца -> month_end_date;
+--   Название месяца       -> month_name;
+--   Год                   -> year;
+--   Номер квартала        -> quarter_number;
+--   Название квартала     -> quarter_name.
 --
--- Скрипт можно запускать независимо от остальных: он сам создаёт
--- последовательность, таблицу и функцию заполнения.
---
--- По умолчанию заполняется диапазон 2010-01-01 .. 2030-12-01.
+-- Скрипт можно запускать отдельно: он сам создаёт последовательность,
+-- таблицу и функцию заполнения.
 -- =============================================================================
 
-CREATE SEQUENCE IF NOT EXISTS public.seq_dim_time;
+CREATE SEQUENCE IF NOT EXISTS public.seq_time_metrics;
 
-CREATE TABLE IF NOT EXISTS public.dim_time (
-    id               bigint PRIMARY KEY DEFAULT nextval('public.seq_dim_time'),
+CREATE TABLE IF NOT EXISTS public.time_metrics (
+    id               bigint PRIMARY KEY DEFAULT nextval('public.seq_time_metrics'),
     external_id      bigint NOT NULL UNIQUE,
     month_start_date date NOT NULL,
     month_end_date   date NOT NULL,
@@ -29,23 +27,22 @@ CREATE TABLE IF NOT EXISTS public.dim_time (
     quarter_number   integer NOT NULL,
     quarter_name     text NOT NULL,
     date_add         timestamp DEFAULT now(),
-    CONSTRAINT chk_dim_time_period CHECK (month_start_date <= month_end_date),
-    CONSTRAINT chk_dim_time_quarter CHECK (quarter_number BETWEEN 1 AND 4),
-    CONSTRAINT uq_dim_time_month UNIQUE (year, month_start_date)
+    CONSTRAINT chk_time_metrics_period CHECK (month_start_date <= month_end_date),
+    CONSTRAINT chk_time_metrics_quarter CHECK (quarter_number BETWEEN 1 AND 4)
 );
 
-COMMENT ON TABLE  public.dim_time IS 'Измерение Время (месяц). external_id = YYYYMM';
-COMMENT ON COLUMN public.dim_time.id               IS 'Внутренний суррогатный код';
-COMMENT ON COLUMN public.dim_time.external_id      IS 'Код месяца в формате YYYYMM';
-COMMENT ON COLUMN public.dim_time.month_start_date IS 'Дата начала месяца';
-COMMENT ON COLUMN public.dim_time.month_end_date   IS 'Дата окончания месяца';
-COMMENT ON COLUMN public.dim_time.month_name       IS 'Название месяца (Январь ... Декабрь)';
-COMMENT ON COLUMN public.dim_time.year             IS 'Год';
-COMMENT ON COLUMN public.dim_time.quarter_number   IS 'Номер квартала (1..4)';
-COMMENT ON COLUMN public.dim_time.quarter_name     IS 'Название квартала (I квартал ... IV квартал)';
-COMMENT ON COLUMN public.dim_time.date_add         IS 'Дата добавления записи';
+COMMENT ON TABLE  public.time_metrics IS 'Метрика Время (месяц). external_id = YYYYMM';
+COMMENT ON COLUMN public.time_metrics.id               IS 'Внутренний код';
+COMMENT ON COLUMN public.time_metrics.external_id      IS 'Код месяца YYYYMM';
+COMMENT ON COLUMN public.time_metrics.month_start_date IS 'Дата начала месяца';
+COMMENT ON COLUMN public.time_metrics.month_end_date   IS 'Дата окончания месяца';
+COMMENT ON COLUMN public.time_metrics.month_name       IS 'Название месяца';
+COMMENT ON COLUMN public.time_metrics.year             IS 'Год';
+COMMENT ON COLUMN public.time_metrics.quarter_number   IS 'Номер квартала';
+COMMENT ON COLUMN public.time_metrics.quarter_name     IS 'Название квартала';
+COMMENT ON COLUMN public.time_metrics.date_add         IS 'Дата добавления записи';
 
-CREATE OR REPLACE FUNCTION public.fill_time_dimension(
+CREATE OR REPLACE FUNCTION public.fill_time_metrics(
     p_from date DEFAULT DATE '2010-01-01',
     p_to   date DEFAULT DATE '2030-12-01'
 )
@@ -55,7 +52,7 @@ AS $$
 DECLARE
     v_month        date;
     v_count        integer := 0;
-    v_external_id  integer;
+    v_external_id  bigint;
     v_month_name   text;
     v_quarter_no   integer;
     v_quarter_name text;
@@ -71,8 +68,8 @@ BEGIN
     v_month := date_trunc('month', p_from)::date;
 
     WHILE v_month <= date_trunc('month', p_to)::date LOOP
-        v_external_id := EXTRACT(YEAR FROM v_month)::integer * 100
-                       + EXTRACT(MONTH FROM v_month)::integer;
+        v_external_id := EXTRACT(YEAR FROM v_month)::bigint * 100
+                       + EXTRACT(MONTH FROM v_month)::bigint;
 
         v_month_name := CASE EXTRACT(MONTH FROM v_month)::integer
             WHEN 1  THEN 'Январь'
@@ -98,7 +95,7 @@ BEGIN
             WHEN 4 THEN 'IV квартал'
         END;
 
-        INSERT INTO public.dim_time (
+        INSERT INTO public.time_metrics (
             external_id,
             month_start_date,
             month_end_date,
@@ -132,19 +129,15 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.fill_time_dimension(date, date)
-    IS 'Формирует/обновляет измерение Время за указанный диапазон месяцев';
+COMMENT ON FUNCTION public.fill_time_metrics(date, date)
+    IS 'Формирует/обновляет метрику Время за указанный диапазон месяцев';
 
--- -----------------------------------------------------------------------------
--- Заполнение. При необходимости измените диапазон.
--- -----------------------------------------------------------------------------
-SELECT public.fill_time_dimension(DATE '2010-01-01', DATE '2030-12-01') AS months_filled;
+SELECT public.fill_time_metrics(DATE '2010-01-01', DATE '2030-12-01') AS months_filled;
 
--- Контроль: 21 год * 12 = 252 месяца.
 SELECT count(*) AS total_months,
        min(external_id) AS first_code,
        max(external_id) AS last_code
-FROM public.dim_time;
+FROM public.time_metrics;
 
 SELECT external_id AS code,
        month_start_date,
@@ -153,6 +146,6 @@ SELECT external_id AS code,
        year,
        quarter_number,
        quarter_name
-FROM public.dim_time
+FROM public.time_metrics
 ORDER BY external_id
 LIMIT 12;
